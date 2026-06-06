@@ -12,7 +12,9 @@ from core.config import settings
 from cache.duckdb_store import db_store
 from cache.sync import sync_catalog_to_cache
 from search.hybrid_search import hybrid_searcher
+from core.feature_flags import ff_manager
 from routers.chat import router as chat_router
+from routers.catalog_debug import router as catalog_debug_router
 
 # Cấu hình logging
 logging.basicConfig(
@@ -28,9 +30,12 @@ async def lifespan(app: FastAPI):
     
     # Init cache và search index khi khởi động
     if settings.CACHE_SYNC_ON_STARTUP:
-        await sync_catalog_to_cache(rebuild_search_index_fn=hybrid_searcher.build_index)
-    else:
+        rebuild_fn = hybrid_searcher.build_index if settings.BUILD_SEARCH_INDEX_ON_STARTUP else None
+        await sync_catalog_to_cache(rebuild_search_index_fn=rebuild_fn)
+    elif settings.BUILD_SEARCH_INDEX_ON_STARTUP:
         hybrid_searcher.build_index(db_store.get_all_products_raw())
+    else:
+        logger.info("Fast startup enabled: using DuckDB catalog without startup sync/vector index.")
         
     yield
     
@@ -56,17 +61,16 @@ app.add_middleware(
 
 # Đăng ký router
 app.include_router(chat_router, prefix="/api", tags=["Chat"])
+app.include_router(catalog_debug_router, prefix="/api", tags=["Catalog Debug"])
 
 @app.get("/health", tags=["System"])
 async def health_check():
     payload = {
         "status": "ok", 
-        "search_ready": hybrid_searcher.is_ready,
-        "harness_active": getattr(settings, 'HARNESS_FF_SDK_KEY', '') != ''
+        "search_ready": True,
+        "vector_search_ready": hybrid_searcher.is_ready,
+        "harness_active": ff_manager.is_active()
     }
-    if not hybrid_searcher.is_ready:
-        payload["status"] = "starting"
-        return JSONResponse(status_code=503, content=payload)
     return payload
 
 if __name__ == "__main__":

@@ -3,9 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Menu, Plus } from 'lucide-react';
 import MessageBubble from '@/components/MessageBubble';
-import QuickPrompts from '@/components/QuickPrompts';
 import StreamingIndicator from '@/components/StreamingIndicator';
-import { generateSessionId } from '@/lib/api';
+import { generateSessionId, getApiBaseUrl } from '@/lib/api';
 
 type Message = {
   id: string;
@@ -61,7 +60,7 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
-      const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const url = getApiBaseUrl();
       const response = await fetch(`${url}/api/chat/stream`, {
         method: 'POST',
         headers: {
@@ -74,7 +73,15 @@ export default function ChatPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        let errorMessage = `Server trả lỗi ${response.status}`;
+        try {
+          const errorPayload = await response.json();
+          errorMessage = errorPayload.detail || errorPayload.error || errorMessage;
+        } catch {
+          const errorText = await response.text();
+          if (errorText) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
       }
       
       if (!response.body) {
@@ -153,10 +160,11 @@ export default function ChatPage() {
       }
     } catch (error) {
       console.error('Error fetching stream:', error);
+      const message = error instanceof Error ? error.message : 'Không rõ nguyên nhân';
       setMessages(prev => [...prev, { 
         id: Date.now().toString(), 
         role: 'agent', 
-        content: 'Xin lỗi, đã có lỗi kết nối đến server. Vui lòng kiểm tra lại backend (đảm bảo đang chạy ở port 8000).' 
+        content: `**Lỗi:** ${message}` 
       }]);
     } finally {
       setIsLoading(false);
@@ -175,12 +183,7 @@ export default function ChatPage() {
       {/* Sidebar */}
       <div className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <div className="icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-            </svg>
-          </div>
-          <h1>BurgerPrints</h1>
+          <img className="brand-logo" src="/burgerprint-logo.svg" alt="BurgerPrint" />
         </div>
         
         <button className="glass-light" style={{
@@ -199,7 +202,6 @@ export default function ChatPage() {
           <span>New Chat</span>
         </button>
 
-        <QuickPrompts onSelect={(prompt) => handleSend(prompt)} />
       </div>
 
       {/* Main Chat Area */}
@@ -209,7 +211,7 @@ export default function ChatPage() {
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)' }}>
             <Menu size={24} />
           </button>
-          <h2 style={{ marginLeft: '1rem', fontSize: '1.1rem', fontWeight: 600 }}>BurgerPrintsAgent</h2>
+          <img className="mobile-brand-logo" src="/burgerprint-logo.svg" alt="BurgerPrint" />
         </div>
 
         <div className="chat-window" ref={scrollContainerRef}>

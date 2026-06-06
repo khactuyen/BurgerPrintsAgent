@@ -106,17 +106,20 @@ body {
   margin-bottom: 2rem;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
 }
 
-.sidebar-header h1 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text-primary);
+.brand-logo {
+  display: block;
+  width: 100%;
+  max-width: 230px;
+  height: auto;
 }
 
-.sidebar-header .icon {
-  color: var(--accent);
+.mobile-brand-logo {
+  display: block;
+  width: 150px;
+  height: auto;
+  margin-left: 1rem;
 }
 
 /* Main Chat Area */
