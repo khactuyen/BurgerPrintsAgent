@@ -75,11 +75,20 @@ export default function ChatPage() {
       if (!response.ok) {
         let errorMessage = `Server trả lỗi ${response.status}`;
         try {
-          const errorPayload = await response.json();
-          errorMessage = errorPayload.detail || errorPayload.error || errorMessage;
+          // Dùng clone() để tránh lỗi "body stream already read"
+          // khi Next.js proxy đã đọc body trước đó
+          const cloned = response.clone();
+          const errorText = await cloned.text();
+          if (errorText) {
+            try {
+              const errorPayload = JSON.parse(errorText);
+              errorMessage = errorPayload.detail || errorPayload.error || errorMessage;
+            } catch {
+              errorMessage = errorText.slice(0, 200); // Giới hạn độ dài
+            }
+          }
         } catch {
-          const errorText = await response.text();
-          if (errorText) errorMessage = errorText;
+          // Không đọc được body — dùng status code
         }
         throw new Error(errorMessage);
       }

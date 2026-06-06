@@ -16,15 +16,12 @@ export async function sendMessageSync(sessionId: string, message: string) {
 
 export function getApiBaseUrl(): string {
   const configuredUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (configuredUrl && !configuredUrl.includes('localhost')) {
+  if (configuredUrl && !configuredUrl.includes('localhost') && !configuredUrl.includes('ngrok')) {
     return configuredUrl;
   }
 
-  if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:8000`;
-  }
-
-  return configuredUrl || 'http://localhost:8000';
+  // Luôn dùng relative path để Next.js proxy sang 8000
+  return '';
 }
 
 export function generateSessionId(): string {

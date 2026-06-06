@@ -8,6 +8,7 @@ from html import unescape
 from typing import List, Dict, Any, Optional
 from core.config import settings
 from api.models import Product, SKU, OrderRequest, OrderResponse
+from harness.api_response_policy import parse_burgerprints_error
 
 logger = logging.getLogger(__name__)
 
@@ -313,6 +314,7 @@ class BurgerPrintsClient:
 
     async def create_order(self, order: OrderRequest) -> OrderResponse:
         shipping_country = self._normalize_country_code(order.address.country)
+        reference_order_id = f"burgerprints-agent-{order.sku}-{int(time.time())}"
         payload = {
             "shipping_name": order.address.name,
             "shipping_address1": order.address.street,
@@ -321,7 +323,7 @@ class BurgerPrintsClient:
             "shipping_state": order.address.state,
             "shipping_zip": order.address.zip,
             "shipping_country": shipping_country,
-            "reference_order_id": f"burgerprints-agent-{order.sku}-{int(time.time())}",
+            "reference_order_id": reference_order_id,
             "items": [
                 {
                     "catalog_sku": order.sku,
@@ -334,9 +336,58 @@ class BurgerPrintsClient:
             "fulfillment_partner": "BurgerPrintsAgent",
         }
         res = await self._post("/order", payload)
-        if res.get("is_success"):
-            return OrderResponse(order_id=res.get("order_id", "UNKNOWN"), status="created", message=res.get("message", "Order placed successfully"))
-        return OrderResponse(order_id="", status="error", message=res.get("message") or str(res.get("errors") or "Unknown error"))
+        data = res.get("data") if isinstance(res.get("data"), dict) else {}
+        order_details = data.get("order") if isinstance(data.get("order"), dict) else data
+        shipping_services = (
+            res.get("shipping_services")
+            or data.get("shipping_services")
+            or order_details.get("shipping_services")
+            or []
+        )
+        order_id = (
+            res.get("order_id")
+            or res.get("id")
+            or data.get("order_id")
+            or data.get("id")
+            or order_details.get("order_id")
+            or order_details.get("id")
+            or ""
+        )
+        is_success = bool(res.get("is_success") or res.get("success"))
+        common = {
+            "reference_order_id": reference_order_id,
+            "sku": order.sku,
+            "quantity": order.quantity,
+            "destination": {
+                "name": order.address.name,
+                "street": order.address.street,
+                "city": order.address.city,
+                "state": order.address.state,
+                "zip": order.address.zip,
+                "country": shipping_country,
+            },
+            "design": {
+                "design_url_front": order.design_url_front,
+                "mockup_url_front": order.mockup_url_front or order.design_url_front,
+            },
+            "shipping_services": shipping_services if isinstance(shipping_services, list) else [],
+            "order_details": order_details if isinstance(order_details, dict) else {},
+            "api_response": res if isinstance(res, dict) else {"raw": res},
+        }
+        if is_success:
+            return OrderResponse(
+                order_id=str(order_id or "UNKNOWN"),
+                status="created",
+                message=res.get("message") or data.get("message") or "Order placed successfully",
+                **common,
+            )
+        return OrderResponse(
+            order_id=str(order_id),
+            status="error",
+            message=res.get("message") or data.get("message") or str(res.get("errors") or "Unknown error"),
+            normalized_error=parse_burgerprints_error(res if isinstance(res, dict) else {"raw": res}),
+            **common,
+        )
 
     def _normalize_country_code(self, country: str) -> str:
         value = (country or "").strip()

@@ -6,21 +6,21 @@ import json
 # =======================================================
 search_products_func = FunctionDeclaration(
     name="search_products",
-    description="Tìm kiếm sản phẩm trong catalog dựa trên text query, danh mục, hoặc chất liệu. Tool này sử dụng BM25 và Vector Search kết hợp DuckDB để tìm kiếm nhanh.",
+    description="Tìm kiếm sản phẩm trong catalog dựa trên text query, danh mục, hoặc chất liệu. Tool này KHÔNG THỂ filter theo giá (price) hoặc thời gian ship. Nếu user yêu cầu tìm theo giá/ship, bạn vẫn chỉ có thể truyền query text (VD: 't-shirt') rồi SAU ĐÓ TỰ GỌI THÊM get_base_cost hoặc get_shipping_time để kiểm tra từng SKU.",
     parameters={
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Câu query tìm kiếm tự do (ví dụ: 'áo thun cotton mùa hè', 'premium mug')"
+                "description": "CÃ¢u query tÃ¬m kiáº¿m tá»± do (vÃ­ dá»¥: 'Ã¡o thun cotton mÃ¹a hÃ¨', 'premium mug')"
             },
             "category": {
                 "type": "string",
-                "description": "Danh mục sản phẩm (ví dụ: 't-shirt', 'polo', 'hoodie', 'mug', 'poster', 'tote')"
+                "description": "Danh má»¥c sáº£n pháº©m (vÃ­ dá»¥: 't-shirt', 'polo', 'hoodie', 'mug', 'poster', 'tote')"
             },
             "material": {
                 "type": "string",
-                "description": "Chất liệu (ví dụ: 'cotton', 'polyester', 'ceramic')"
+                "description": "Cháº¥t liá»‡u (vÃ­ dá»¥: 'cotton', 'polyester', 'ceramic')"
             }
         }
     }
@@ -31,7 +31,7 @@ search_products_func = FunctionDeclaration(
 # =======================================================
 get_sku_info_func = FunctionDeclaration(
     name="get_sku_info",
-    description="Lấy danh sách các SKUs (bao gồm màu sắc, kích thước, xưởng, mã sku_code) của một product_id cụ thể.",
+    description="Láº¥y danh sÃ¡ch cÃ¡c SKUs (bao gá»“m mÃ u sáº¯c, kÃ­ch thÆ°á»›c, xÆ°á»Ÿng, mÃ£ sku_code) cá»§a má»™t product_id cá»¥ thá»ƒ.",
     parameters={
         "type": "object",
         "properties": {
@@ -41,7 +41,7 @@ get_sku_info_func = FunctionDeclaration(
             },
             "product_id": {
                 "type": "string",
-                "description": "ID của sản phẩm (ví dụ: P1, P2)"
+                "description": "ID cá»§a sáº£n pháº©m (vÃ­ dá»¥: P1, P2)"
             }
         },
     }
@@ -52,14 +52,14 @@ get_sku_info_func = FunctionDeclaration(
 # =======================================================
 get_base_cost_func = FunctionDeclaration(
     name="get_base_cost",
-    description="[REALTIME] Lấy giá sản xuất (base cost) cập nhật nhất của một hoặc nhiều SKU codes. Luôn gọi hàm này để báo giá chính xác, không được đoán.",
+    description="[REALTIME] Láº¥y giÃ¡ sáº£n xuáº¥t (base cost) cáº­p nháº­t nháº¥t cá»§a má»™t hoáº·c nhiá»u SKU codes. LuÃ´n gá»i hÃ m nÃ y Ä‘á»ƒ bÃ¡o giÃ¡ chÃ­nh xÃ¡c, khÃ´ng Ä‘Æ°á»£c Ä‘oÃ¡n.",
     parameters={
         "type": "object",
         "properties": {
             "sku_codes": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Danh sách các mã SKU cần lấy giá."
+                "description": "Danh sÃ¡ch cÃ¡c mÃ£ SKU cáº§n láº¥y giÃ¡."
             }
         },
         "required": ["sku_codes"]
@@ -71,18 +71,18 @@ get_base_cost_func = FunctionDeclaration(
 # =======================================================
 get_shipping_cost_func = FunctionDeclaration(
     name="get_shipping_cost",
-    description="[REALTIME] Lấy phí vận chuyển cập nhật nhất của SKU đến một quốc gia cụ thể.",
+    description="[REALTIME] Láº¥y phÃ­ váº­n chuyá»ƒn cáº­p nháº­t nháº¥t cá»§a SKU Ä‘áº¿n má»™t quá»‘c gia cá»¥ thá»ƒ.",
     parameters={
         "type": "object",
         "properties": {
             "sku_codes": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Danh sách mã SKU."
+                "description": "Danh sÃ¡ch mÃ£ SKU."
             },
             "destination": {
                 "type": "string",
-                "description": "Quốc gia đích đến (ví dụ: US, EU, AU, CA, VN)."
+                "description": "Quá»‘c gia Ä‘Ã­ch Ä‘áº¿n (vÃ­ dá»¥: US, EU, AU, CA, VN)."
             }
         },
         "required": ["sku_codes", "destination"]
@@ -94,14 +94,14 @@ get_shipping_cost_func = FunctionDeclaration(
 # =======================================================
 get_production_time_func = FunctionDeclaration(
     name="get_production_time",
-    description="[REALTIME] Lấy thời gian sản xuất ước tính hiện tại của SKU.",
+    description="[REALTIME] Láº¥y thá»i gian sáº£n xuáº¥t Æ°á»›c tÃ­nh hiá»‡n táº¡i cá»§a SKU.",
     parameters={
         "type": "object",
         "properties": {
             "sku_codes": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Danh sách mã SKU."
+                "description": "Danh sÃ¡ch mÃ£ SKU."
             }
         },
         "required": ["sku_codes"]
@@ -113,18 +113,18 @@ get_production_time_func = FunctionDeclaration(
 # =======================================================
 get_shipping_time_func = FunctionDeclaration(
     name="get_shipping_time",
-    description="[REALTIME] Lấy thời gian vận chuyển ước tính của SKU đến quốc gia đích.",
+    description="[REALTIME] Láº¥y thá»i gian váº­n chuyá»ƒn Æ°á»›c tÃ­nh cá»§a SKU Ä‘áº¿n quá»‘c gia Ä‘Ã­ch.",
     parameters={
         "type": "object",
         "properties": {
             "sku_codes": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Danh sách mã SKU."
+                "description": "Danh sÃ¡ch mÃ£ SKU."
             },
             "destination": {
                 "type": "string",
-                "description": "Quốc gia đích đến."
+                "description": "Quá»‘c gia Ä‘Ã­ch Ä‘áº¿n."
             }
         },
         "required": ["sku_codes", "destination"]
@@ -136,14 +136,14 @@ get_shipping_time_func = FunctionDeclaration(
 # =======================================================
 check_sku_availability_func = FunctionDeclaration(
     name="check_sku_availability",
-    description="[REALTIME] Kiểm tra trạng thái tồn kho và hoạt động của SKU (active, inactive, discontinued). Không được recommend SKU inactive.",
+    description="[REALTIME] Kiá»ƒm tra tráº¡ng thÃ¡i tá»“n kho vÃ  hoáº¡t Ä‘á»™ng cá»§a SKU (active, inactive, discontinued). KhÃ´ng Ä‘Æ°á»£c recommend SKU inactive.",
     parameters={
         "type": "object",
         "properties": {
             "sku_codes": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Danh sách mã SKU cần check."
+                "description": "Danh sÃ¡ch mÃ£ SKU cáº§n check."
             }
         },
         "required": ["sku_codes"]
@@ -155,14 +155,14 @@ check_sku_availability_func = FunctionDeclaration(
 # =======================================================
 check_provider_status_func = FunctionDeclaration(
     name="check_provider_status",
-    description="[REALTIME] Kiểm tra trạng thái của xưởng (active, overload, maintenance). Không được recommend xưởng overload/maintenance.",
+    description="[REALTIME] Kiá»ƒm tra tráº¡ng thÃ¡i cá»§a xÆ°á»Ÿng (active, overload, maintenance). KhÃ´ng Ä‘Æ°á»£c recommend xÆ°á»Ÿng overload/maintenance.",
     parameters={
         "type": "object",
         "properties": {
             "provider_ids": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Danh sách ID xưởng cần check."
+                "description": "Danh sÃ¡ch ID xÆ°á»Ÿng cáº§n check."
             }
         },
         "required": ["provider_ids"]
@@ -174,18 +174,18 @@ check_provider_status_func = FunctionDeclaration(
 # =======================================================
 check_region_support_func = FunctionDeclaration(
     name="check_region_support",
-    description="[REALTIME] Kiểm tra xem SKU có hỗ trợ vận chuyển đến quốc gia đích hay không (True/False).",
+    description="[REALTIME] Kiá»ƒm tra xem SKU cÃ³ há»— trá»£ váº­n chuyá»ƒn Ä‘áº¿n quá»‘c gia Ä‘Ã­ch hay khÃ´ng (True/False).",
     parameters={
         "type": "object",
         "properties": {
             "sku_codes": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Danh sách mã SKU."
+                "description": "Danh sÃ¡ch mÃ£ SKU."
             },
             "region": {
                 "type": "string",
-                "description": "Khu vực/Quốc gia đích đến (US, EU, AU...)."
+                "description": "Khu vá»±c/Quá»‘c gia Ä‘Ã­ch Ä‘áº¿n (US, EU, AU...)."
             }
         },
         "required": ["sku_codes", "region"]
@@ -193,16 +193,46 @@ check_region_support_func = FunctionDeclaration(
 )
 
 # =======================================================
-# 10. create_order
+# 10. prepare_order_review
 # =======================================================
-create_order_func = FunctionDeclaration(
-    name="create_order",
-    description="Tạo đơn hàng fulfillment mới. BẮT BUỘC: Không bao giờ thu thập địa chỉ người nhận nếu chưa gọi tool check_sku_availability để đảm bảo SKU tồn tại. CHỈ GỌI khi người dùng gõ câu lệnh có chứa chữ 'xác nhận'. BẮT BUỘC phải có design_url_front là link ảnh public http/https mở được trên internet, ví dụ https://domain.com/design.png hoặc .jpg. Không dùng file local, localhost, private Google Drive link, hoặc placeholder. Tuyệt đối không tự chọn ngẫu nhiên.",
+prepare_order_review_func = FunctionDeclaration(
+    name="prepare_order_review",
+    description="Bat buoc goi truoc khi yeu cau user xac nhan dat hang. Tool nay tao ban tom tat SKU, quantity, destination, gia, design; validate design_url_front; va tra order_review_token de create_order duoc phep chay.",
     parameters={
         "type": "object",
         "properties": {
-            "sku": {"type": "string", "description": "Mã SKU để order"},
-            "quantity": {"type": "integer", "description": "Số lượng (mặc định 1)"},
+            "sku": {"type": "string", "description": "Ma SKU can dat"},
+            "quantity": {"type": "integer", "description": "So luong"},
+            "address": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "street": {"type": "string"},
+                    "city": {"type": "string"},
+                    "state": {"type": "string"},
+                    "zip": {"type": "string"},
+                    "country": {"type": "string"}
+                },
+                "required": ["name", "street", "city", "state", "zip", "country"]
+            },
+            "design_url_front": {"type": "string", "description": "Public image URL dung de validate truoc khi order"},
+            "mockup_url_front": {"type": "string", "description": "Mockup URL neu co"}
+        },
+        "required": ["sku", "quantity", "address", "design_url_front"]
+    }
+)
+
+# =======================================================
+# 11. create_order
+# =======================================================
+create_order_func = FunctionDeclaration(
+    name="create_order",
+    description="Táº¡o Ä‘Æ¡n hÃ ng fulfillment má»›i. Báº®T BUá»˜C: KhÃ´ng bao giá» thu tháº­p Ä‘á»‹a chá»‰ ngÆ°á»i nháº­n náº¿u chÆ°a gá»i tool check_sku_availability Ä‘á»ƒ Ä‘áº£m báº£o SKU tá»“n táº¡i. CHá»ˆ Gá»ŒI khi ngÆ°á»i dÃ¹ng gÃµ cÃ¢u lá»‡nh cÃ³ chá»©a chá»¯ 'xÃ¡c nháº­n'. Báº®T BUá»˜C pháº£i cÃ³ design_url_front lÃ  link áº£nh public http/https má»Ÿ Ä‘Æ°á»£c trÃªn internet, vÃ­ dá»¥ https://domain.com/design.png hoáº·c .jpg. KhÃ´ng dÃ¹ng file local, localhost, private Google Drive link, hoáº·c placeholder. Tuyá»‡t Ä‘á»‘i khÃ´ng tá»± chá»n ngáº«u nhiÃªn.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "sku": {"type": "string", "description": "MÃ£ SKU Ä‘á»ƒ order"},
+            "quantity": {"type": "integer", "description": "Sá»‘ lÆ°á»£ng (máº·c Ä‘á»‹nh 1)"},
             "address": {
                 "type": "object",
                 "properties": {
@@ -223,15 +253,19 @@ create_order_func = FunctionDeclaration(
                 "type": "string",
                 "description": "Public http/https URL cua mockup mat truoc neu co. Neu khong co se dung design_url_front."
             },
-            "shipping_method": {"type": "string", "description": "Ví dụ: 'standard', 'express'"}
+            "order_review_token": {
+                "type": "string",
+                "description": "Token tra ve tu prepare_order_review. Bat buoc de chung minh da hien summary cho user truoc khi xac nhan."
+            },
+            "shipping_method": {"type": "string", "description": "VÃ­ dá»¥: 'standard', 'express'"}
         },
-        "required": ["sku", "quantity", "address", "design_url_front"]
+        "required": ["sku", "quantity", "address", "design_url_front", "order_review_token"]
     }
 )
 
 get_order_creation_status_func = FunctionDeclaration(
     name="get_order_creation_status",
-    description="Kiểm tra trạng thái bật/tắt hiện tại của tính năng tạo đơn từ Harness. Phải gọi tool này thay vì tự suy đoán trạng thái.",
+    description="Kiá»ƒm tra tráº¡ng thÃ¡i báº­t/táº¯t hiá»‡n táº¡i cá»§a tÃ­nh nÄƒng táº¡o Ä‘Æ¡n tá»« Harness. Pháº£i gá»i tool nÃ y thay vÃ¬ tá»± suy Ä‘oÃ¡n tráº¡ng thÃ¡i.",
     parameters={"type": "object", "properties": {}}
 )
 
@@ -248,6 +282,7 @@ agent_tools = Tool(
         check_provider_status_func,
         check_region_support_func,
         get_order_creation_status_func,
+        prepare_order_review_func,
         create_order_func
     ]
 )

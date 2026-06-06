@@ -61,6 +61,15 @@ class OrderResponse(BaseModel):
     order_id: str
     status: str
     message: str
+    reference_order_id: Optional[str] = None
+    sku: Optional[str] = None
+    quantity: Optional[int] = None
+    destination: Optional[Dict[str, Any]] = None
+    design: Optional[Dict[str, Any]] = None
+    shipping_services: List[Dict[str, Any]] = []
+    order_details: Dict[str, Any] = {}
+    api_response: Dict[str, Any] = {}
+    normalized_error: Optional[Dict[str, Any]] = None
 
 class ChatRequest(BaseModel):
     message: str

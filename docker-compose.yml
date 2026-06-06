@@ -10,7 +10,7 @@ services:
     volumes:
       - ./backend:/app
       - backend_cache:/app/.cache
-      - ./totemic-vim-467706-a3-555a52dca136.json:/app/secrets/vertex-service-account.json:ro
+      - ./totemic-vim-467706-a3-2b41c9267c79.json:/app/vertex-service-account.json:ro
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
@@ -18,7 +18,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 10
+      start_period: 300s
 
   frontend:
     build:

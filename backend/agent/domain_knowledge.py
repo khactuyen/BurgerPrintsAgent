@@ -92,6 +92,18 @@ DOMAIN_RULES: Dict[str, Dict[str, object]] = {
             "For Q4/gift orders, prioritize reliable fulfillment, shorter processing time, and shipping buffer.",
         ],
     },
+    "compatibility.sublimation": {
+        "title": "Sublimation compatibility",
+        "guidance": [
+            "Do not suggest Sublimation for non-Polyester products.",
+        ],
+    },
+    "time.processing_vs_shipping": {
+        "title": "Processing vs Shipping time",
+        "guidance": [
+            "Processing Time ≠ Shipping Time. Total estimated delivery = Processing Time + Shipping Time.",
+        ],
+    },
 }
 
 
@@ -107,6 +119,8 @@ TOPIC_PATTERNS = {
     "product.hoodie": [r"\bhoodie\b", r"ao hoodie", r"ao ni"],
     "shipping.us": [r"\bus\b", r"united states", r"\bmy\b", r"\busa\b"],
     "season.q4": [r"\bq4\b", r"mua le", r"christmas", r"holiday", r"qua tang"],
+    "compatibility.sublimation": [r"\bsublimation\b", r"\bsublimate\b"],
+    "time.processing_vs_shipping": [r"processing time", r"shipping time", r"thoi gian san xuat", r"thoi gian ship", r"bao lau", r"may ngay"],
 }
 
 

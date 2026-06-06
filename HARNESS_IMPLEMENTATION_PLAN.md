@@ -257,3 +257,42 @@ Bắt regression khi sửa prompt/model/tool.
 - Xác nhận order chỉ tính trên tin nhắn hiện tại.
 - Logs có đủ tool name, policy code và reason.
 - Không thêm LLM call mới cho harness.
+
+## Policy Extension Status
+
+Implemented after Phase 2:
+
+- SKU Presentation Policy
+  - `get_sku_info` records that a SKU was presented for the current session.
+  - `create_order` is blocked with `SKU_PRESENTATION_REQUIRED` if a session tries to order before SKU details were presented.
+- Destination Policy
+  - Address country/state/postal-code mismatch is blocked.
+  - Provider `countries_served` is enforced only when cache has verified country data.
+  - Unsupported region API responses are not treated as verified support.
+- Design Validation Policy
+  - `prepare_order_review` and `create_order` validate `design_url_front`.
+  - Blocks non-http URLs, localhost/private network URLs, SVG, non-image responses, oversized files, and unsupported image resolutions.
+- Order Confirmation Policy
+  - Added `prepare_order_review` tool.
+  - Agent must call `prepare_order_review` before asking for final confirmation.
+  - `create_order` requires `order_review_token`.
+  - Duplicate order fingerprints are blocked for a short TTL.
+  - Quantity-large auto-block was removed by product decision.
+- External API Response Policy
+  - BurgerPrints order errors are normalized into structured codes such as `SHIPPING_SERVICE_UNAVAILABLE`, `DESIGN_URL_REQUIRED_BY_API`, and `DESIGN_RESOLUTION_INVALID`.
+
+Implementation files:
+
+- `backend/harness/order_state.py`
+- `backend/harness/design_validator.py`
+- `backend/harness/api_response_policy.py`
+- `backend/agent/tool_handlers.py`
+- `backend/agent/tools.py`
+- `backend/harness/policy_engine.py`
+- `backend/harness/tool_executor.py`
+
+Latest test:
+
+```text
+13 passed
+```

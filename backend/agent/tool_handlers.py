@@ -4,6 +4,8 @@ from api.burgerprints import BurgerPrintsClient
 from api.models import OrderAddress, OrderRequest
 from cache.duckdb_store import db_store
 from core.feature_flags import ff_manager
+from harness import order_state
+from harness.design_validator import validate_design_url
 from search.hybrid_search import hybrid_searcher
 
 
@@ -98,8 +100,10 @@ def _extract_design_requirements(product: dict, sku: dict) -> dict:
         "design_url_front_format": "Public http/https image URL. Example: https://domain.com/design-front.png or .jpg",
         "local_or_private_url_allowed": False,
         "resolution_note": (
-            "Design image must match one of BurgerPrints accepted resolutions for this SKU. "
-            "If BurgerPrints returns a resolution error, ask the user to resize artwork to one of the listed width x height values."
+            "BẮT BUỘC nói với user: 'Ảnh thiết kế phải đúng kích thước chuẩn của BurgerPrints. "
+            "Ví dụ với áo thun thường là 4500x5400 px hoặc 4800x5400 px, Cốc là 2700x1140 px. "
+            "Nếu sai kích thước hệ thống sẽ báo lỗi. Bạn lưu ý kiểm tra size trước khi gửi link.' "
+            "Design image must match BurgerPrints accepted resolutions."
         ),
         "raw_requirements": raw_requirements,
     }
@@ -196,6 +200,54 @@ async def get_order_creation_status(args: dict) -> dict:
     }
 
 
+async def prepare_order_review(args: dict) -> dict:
+    session_id = str(args.get("_session_id") or "")
+    sku_code = str(args.get("sku") or "").strip()
+    sku = db_store.get_sku_by_code(sku_code)
+    if not sku:
+        return {"ok": False, "code": "SKU_NOT_FOUND", "error": f"SKU `{sku_code}` was not found."}
+    if session_id and not order_state.was_sku_presented(session_id, sku_code):
+        return {
+            "ok": False,
+            "code": "SKU_PRESENTATION_REQUIRED",
+            "error": f"Call get_sku_info for SKU `{sku_code}` and show product details before preparing order review.",
+        }
+
+    address = args.get("address") or {}
+    required_address_fields = ["name", "street", "city", "state", "zip", "country"]
+    missing = [field for field in required_address_fields if not address.get(field)]
+    if missing:
+        return {"ok": False, "code": "ADDRESS_REQUIRED", "missing_fields": missing}
+
+    design_url = str(args.get("design_url_front") or "").strip()
+    design_validation = await validate_design_url(design_url)
+    if not design_validation.ok:
+        return design_validation.to_dict()
+
+    product = db_store.get_product_by_id(sku.get("product_id")) or {}
+    summary = {
+        "sku": slim_sku(sku),
+        "product": slim_product(product),
+        "quantity": int(args.get("quantity") or 1),
+        "destination": address,
+        "base_price": sku.get("price"),
+        "second_item_price": sku.get("second_price"),
+        "design": {
+            "design_url_front": design_url,
+            "validation": design_validation.to_dict(),
+        },
+        "shipping_note": "Shipping cost/availability is not available from current pre-order API cache and will be confirmed by BurgerPrints during order creation.",
+    }
+    token = order_state.create_order_review(session_id, args, summary)
+    return {
+        "ok": True,
+        "code": "ORDER_REVIEW_READY",
+        "order_review_token": token,
+        "summary": summary,
+        "required_confirmation": f"Xác nhận đặt SKU {sku_code}",
+    }
+
+
 async def create_order(args: dict) -> dict:
     sku = str(args.get("sku", "")).strip()
     sku_record = db_store.get_sku_by_code(sku)
@@ -214,6 +266,10 @@ async def create_order(args: dict) -> dict:
     if not provider_status.get("_unsupported") and str(provider_status.get(provider_id, "")).lower() != "active":
         return {"ok": False, "code": "PROVIDER_INACTIVE", "error": f"Provider `{provider_id}` is not active."}
 
+    design_validation = await validate_design_url(str(args.get("design_url_front") or ""))
+    if not design_validation.ok:
+        return design_validation.to_dict()
+
     result = await bp_client.create_order(
         OrderRequest(
             sku=sku,
@@ -224,4 +280,7 @@ async def create_order(args: dict) -> dict:
             mockup_url_front=args.get("mockup_url_front"),
         )
     )
-    return result.model_dump()
+    dumped = result.model_dump()
+    if dumped.get("status") == "created":
+        order_state.mark_order_created(args)
+    return dumped

@@ -109,10 +109,10 @@ def user_explicitly_confirmed_sku(message: str, sku: str) -> bool:
     return normalized_sku in normalized and any(phrase.casefold() in normalized for phrase in confirmation_phrases)
 
 
-async def execute_tool(func_name: str, args: dict, user_message: str = "") -> dict:
+async def execute_tool(func_name: str, args: dict, user_message: str = "", session_id: str = "") -> dict:
     """Thực thi tool mapping từ tên function call của Gemini"""
     logger.info(f"Executing tool: {func_name} with args: {args}")
-    return await tool_executor.execute(func_name, args, user_message=user_message)
+    return await tool_executor.execute(func_name, args, user_message=user_message, session_id=session_id)
 
     # Legacy mapping below remains unreachable during the Phase 2 rollout.
     try:
@@ -275,7 +275,7 @@ async def process_chat(session_id: str, message: str):
                     func_name = fc.name
                     # Convert protobuf struct to dict
                     args = {k: v for k, v in fc.args.items()}
-                    tasks.append(execute_tool(func_name, args, user_message=message))
+                    tasks.append(execute_tool(func_name, args, user_message=message, session_id=session_id))
                 
                 # Đợi tất cả tool chạy xong cùng lúc (giảm 60-70% latency so với tuần tự)
                 results = await asyncio.gather(*tasks)
@@ -361,7 +361,7 @@ async def process_chat_provider(session_id: str, message: str, sess_data: dict, 
             logger.info("Seed requested %s tool call(s) in parallel.", len(calls))
             results = await asyncio.gather(
                 *[
-                    execute_tool(call["name"], call["args"], user_message=message)
+                    execute_tool(call["name"], call["args"], user_message=message, session_id=session_id)
                     for call in calls
                 ]
             )
@@ -377,12 +377,18 @@ async def process_chat_provider(session_id: str, message: str, sess_data: dict, 
         yield {"data": "[DONE]"}
     except Exception as e:
         logger.error("Error in primary provider %s: %s", session_type.__name__, e)
-        if session_type is VertexChatSession and settings.FALLBACK_MODEL_PROVIDER.lower() == "byteplus":
+        if (
+            session_type is VertexChatSession
+            and settings.FALLBACK_MODEL_PROVIDER.lower() == "byteplus"
+            and settings.SEEDANCE_API_KEY
+        ):
             logger.warning("Falling back from Vertex to BytePlus Seed.")
             fallback_session = BytePlusChatSession()
             session_manager.set_chat_session(session_id, fallback_session)
             async for event in process_chat_provider(session_id, message, sess_data, BytePlusChatSession):
                 yield event
             return
+        if session_type is VertexChatSession and settings.FALLBACK_MODEL_PROVIDER.lower() == "byteplus":
+            logger.warning("BytePlus fallback is configured but SEEDANCE_API_KEY is missing; skipping fallback.")
         yield {"data": json.dumps({"error": normalize_error_message(e)})}
         yield {"data": "[DONE]"}

@@ -107,6 +107,9 @@ class BytePlusChatSession:
         return await self._complete(allow_tools=False)
 
     async def _complete(self, allow_tools: bool = True) -> Dict[str, Any]:
+        if not settings.SEEDANCE_API_KEY:
+            raise RuntimeError("SEEDANCE_API_KEY is missing; BytePlus Seed provider cannot be used.")
+
         headers = {
             "Authorization": f"Bearer {settings.SEEDANCE_API_KEY}",
             "Content-Type": "application/json",

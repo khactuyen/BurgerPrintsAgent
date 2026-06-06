@@ -4,6 +4,14 @@ const nextConfig = {
   images: {
     domains: ['cdn.burgerprints.com'],
   },
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://backend:8000/api/:path*'
+      }
+    ];
+  }
 };
 
 export default nextConfig;

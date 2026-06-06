@@ -4,6 +4,7 @@ import time
 from typing import Any, Dict
 
 from harness.policy_engine import evaluate_tool_call
+from harness import order_state
 from harness.tool_registry import ToolRegistry
 
 
@@ -14,7 +15,10 @@ class ToolExecutor:
     def __init__(self, registry: ToolRegistry):
         self.registry = registry
 
-    async def execute(self, name: str, args: Dict[str, Any], user_message: str = "") -> Dict[str, Any]:
+    async def execute(self, name: str, args: Dict[str, Any], user_message: str = "", session_id: str = "") -> Dict[str, Any]:
+        args = dict(args or {})
+        if session_id:
+            args.setdefault("_session_id", session_id)
         definition = self.registry.get(name)
         if not definition:
             return {
@@ -23,7 +27,7 @@ class ToolExecutor:
                 "error": f"Tool `{name}` is not registered.",
             }
 
-        policy = evaluate_tool_call(name, args, user_message=user_message)
+        policy = evaluate_tool_call(name, args, user_message=user_message, session_id=session_id)
         logger.info(
             "Policy decision for tool %s: allowed=%s code=%s reason=%s",
             name,
@@ -50,6 +54,10 @@ class ToolExecutor:
                     (time.perf_counter() - started) * 1000,
                 )
                 if isinstance(result, dict):
+                    if name == "get_sku_info" and result.get("ok") and result.get("sku", {}).get("sku_code"):
+                        order_state.mark_sku_presented(session_id, result["sku"]["sku_code"])
+                    if name == "create_order" and result.get("status") == "created":
+                        order_state.mark_order_created(args)
                     return result
                 return {"ok": True, "data": result}
             except asyncio.TimeoutError:

@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from cache.duckdb_store import db_store
 from core.feature_flags import ff_manager
+from harness import order_state
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ SAFE_TOOLS = {
     "check_provider_status",
     "check_region_support",
     "get_order_creation_status",
+    "prepare_order_review",
 }
 
 CRITICAL_TOOLS = {"create_order"}
@@ -44,7 +46,7 @@ def _normalize(text: str) -> str:
     normalized = unicodedata.normalize("NFKC", text or "").casefold()
     decomposed = unicodedata.normalize("NFD", normalized)
     without_marks = "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
-    return without_marks.replace("đ", "d")
+    return without_marks.replace("Ä‘", "d")
 
 
 def _user_confirmed_sku(message: str, sku: str) -> bool:
@@ -119,7 +121,7 @@ def _validate_address_consistency(address: Dict[str, Any]) -> PolicyDecision | N
     return None
 
 
-def evaluate_tool_call(func_name: str, args: Dict[str, Any], user_message: str = "") -> PolicyDecision:
+def evaluate_tool_call(func_name: str, args: Dict[str, Any], user_message: str = "", session_id: str = "") -> PolicyDecision:
     if func_name in SAFE_TOOLS:
         return PolicyDecision(True, "POLICY_ALLOWED", "Safe read-only tool.")
 
@@ -127,30 +129,52 @@ def evaluate_tool_call(func_name: str, args: Dict[str, Any], user_message: str =
         return PolicyDecision(False, "TOOL_NOT_ALLOWED", f"Tool `{func_name}` is not registered in policy allowlist.")
 
     if func_name == "create_order":
-        return _evaluate_create_order(args, user_message)
+        return _evaluate_create_order(args, user_message, session_id)
 
     return PolicyDecision(False, "TOOL_NOT_ALLOWED", f"Tool `{func_name}` is not allowed.")
 
 
-def _evaluate_create_order(args: Dict[str, Any], user_message: str) -> PolicyDecision:
+def _evaluate_create_order(args: Dict[str, Any], user_message: str, session_id: str = "") -> PolicyDecision:
     if not ff_manager.is_order_creation_enabled():
-        return PolicyDecision(False, "ORDER_CREATION_DISABLED", "Tính năng tạo đơn hàng hiện đang bị tắt bởi quản trị viên.")
+        return PolicyDecision(False, "ORDER_CREATION_DISABLED", "TÃ­nh nÄƒng táº¡o Ä‘Æ¡n hÃ ng hiá»‡n Ä‘ang bá»‹ táº¯t bá»Ÿi quáº£n trá»‹ viÃªn.")
 
     sku = str(args.get("sku", "")).strip()
     if not sku:
-        return PolicyDecision(False, "SKU_REQUIRED", "Không thể tạo đơn: thiếu mã SKU.")
+        return PolicyDecision(False, "SKU_REQUIRED", "KhÃ´ng thá»ƒ táº¡o Ä‘Æ¡n: thiáº¿u mÃ£ SKU.")
 
     sku_record = db_store.get_sku_by_code(sku)
     if not sku_record:
-        return PolicyDecision(False, "SKU_NOT_FOUND", f"Không thể tạo đơn: SKU `{sku}` không tồn tại trong catalog.")
+        return PolicyDecision(False, "SKU_NOT_FOUND", f"KhÃ´ng thá»ƒ táº¡o Ä‘Æ¡n: SKU `{sku}` khÃ´ng tá»“n táº¡i trong catalog.")
+
+    if session_id and not order_state.was_sku_presented(session_id, sku):
+        return PolicyDecision(
+            False,
+            "SKU_PRESENTATION_REQUIRED",
+            f"Cannot create order before presenting SKU `{sku}` details with get_sku_info.",
+        )
+
+    review_token = str(args.get("order_review_token") or "").strip()
+    if session_id and not order_state.is_order_review_valid(session_id, review_token, args):
+        return PolicyDecision(
+            False,
+            "ORDER_REVIEW_REQUIRED",
+            "Cannot create order before returning an order summary/review to the user.",
+        )
+
+    if order_state.is_duplicate_order(args):
+        return PolicyDecision(
+            False,
+            "DUPLICATE_ORDER_BLOCKED",
+            "An identical order was created recently. Duplicate order creation is blocked.",
+        )
 
     if not _user_confirmed_sku(user_message, sku):
         return PolicyDecision(
             False,
             "ORDER_CONFIRMATION_REQUIRED",
             (
-                f"Chưa tạo đơn. Người dùng phải xác nhận rõ mã SKU `{sku}` trong tin nhắn hiện tại, "
-                f"ví dụ: `Xác nhận đặt SKU {sku}`. Không được tự chọn SKU ngẫu nhiên."
+                f"ChÆ°a táº¡o Ä‘Æ¡n. NgÆ°á»i dÃ¹ng pháº£i xÃ¡c nháº­n rÃµ mÃ£ SKU `{sku}` trong tin nháº¯n hiá»‡n táº¡i, "
+                f"vÃ­ dá»¥: `XÃ¡c nháº­n Ä‘áº·t SKU {sku}`. KhÃ´ng Ä‘Æ°á»£c tá»± chá»n SKU ngáº«u nhiÃªn."
             ),
         )
 
@@ -161,19 +185,27 @@ def _evaluate_create_order(args: Dict[str, Any], user_message: str) -> PolicyDec
         return PolicyDecision(
             False,
             "ADDRESS_REQUIRED",
-            f"Không thể tạo đơn: thiếu thông tin địa chỉ `{', '.join(missing)}`.",
+            f"KhÃ´ng thá»ƒ táº¡o Ä‘Æ¡n: thiáº¿u thÃ´ng tin Ä‘á»‹a chá»‰ `{', '.join(missing)}`.",
         )
 
     address_issue = _validate_address_consistency(address)
     if address_issue:
         return address_issue
 
+    provider = db_store.get_provider_by_id(sku_record.get("provider_id")) or {}
+    supported_countries = provider.get("countries_served") or []
+    destination_country = _normalize_country_code(str(address.get("country") or ""))
+    if supported_countries and destination_country not in {str(country).upper() for country in supported_countries}:
+        return PolicyDecision(
+            False,
+            "REGION_NOT_SUPPORTED",
+            f"SKU `{sku}` is not supported for destination `{destination_country}` according to provider cache.",
+        )
+
     quantity = int(args.get("quantity") or 0)
     if quantity <= 0:
-        return PolicyDecision(False, "INVALID_QUANTITY", "Không thể tạo đơn: số lượng phải lớn hơn 0.")
+        return PolicyDecision(False, "INVALID_QUANTITY", "KhÃ´ng thá»ƒ táº¡o Ä‘Æ¡n: sá»‘ lÆ°á»£ng pháº£i lá»›n hÆ¡n 0.")
 
-    if quantity > 10:
-        return PolicyDecision(False, "QUANTITY_REQUIRES_REVIEW", "Đơn số lượng lớn cần admin review trước khi tạo.")
 
     design_url_front = str(args.get("design_url_front") or "").strip()
     if not design_url_front:
