@@ -297,15 +297,6 @@ async def process_chat(session_id: str, message: str):
                 response = await chat.send_message_async(parts)
             else:
                 # Không gọi tool nữa, Gemini bắt đầu trả lời bằng text
-                # Cần stream response cho frontend
-                # Vì ở đây ta không gọi send_message(stream=True) ngay từ đầu do vướng vòng lặp func call,
-                # Ta yield trực tiếp nội dung response hiện tại (text)
-                
-                # Tuy nhiên, để UX tốt nhất, ta có thể stream ngay từ lần generate_content cuối
-                # (Nhưng do SDK thiết kế, ta yield text đã sinh ra làm các chunk nhỏ để giả lập streaming)
-                # Hoặc có thể yield toàn bộ text, Frontend sẽ animate. 
-                # Ở đây backend sẽ stream chunk nhỏ
-                
                 text = response.text
                 if tool_round == 0 and not wait_retry_done and is_waiting_placeholder(text):
                     wait_retry_done = True
@@ -320,7 +311,6 @@ async def process_chat(session_id: str, message: str):
                 chunk_size = 5
                 for i in range(0, len(text), chunk_size):
                     chunk = text[i:i+chunk_size]
-                    # EventSourceResponse adds the SSE framing.
                     yield {"data": json.dumps({"text": chunk})}
                     await asyncio.sleep(0.01) # Small delay for typing effect
                 
@@ -335,12 +325,12 @@ async def process_chat(session_id: str, message: str):
 
 
 async def process_chat_provider(session_id: str, message: str, sess_data: dict, session_type):
-    chat = sess_data["chat_session"]
-    if not isinstance(chat, session_type):
-        chat = session_type()
-        session_manager.set_chat_session(session_id, chat)
-
     try:
+        chat = sess_data["chat_session"]
+        if not isinstance(chat, session_type):
+            chat = session_type()
+            session_manager.set_chat_session(session_id, chat)
+
         domain_context = build_domain_context(message)
         model_message = message
         if domain_context:

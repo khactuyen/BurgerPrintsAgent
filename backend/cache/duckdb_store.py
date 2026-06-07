@@ -10,10 +10,65 @@ logger = logging.getLogger(__name__)
 class DuckDBStore:
     def __init__(self):
         self.db_path = settings.DUCKDB_PATH
-        self.conn = duckdb.connect(self.db_path)
+        self.conn = self._connect_with_retry()
         self.init_schema()
 
+    def _connect_with_retry(self, retries: int = 5, delay: float = 2.0):
+        """Thử kết nối DuckDB nhiều lần để xử lý stale lock khi container restart."""
+        import os
+
+        # Đảm bảo thư mục tồn tại
+        db_dir = os.path.dirname(os.path.abspath(self.db_path))
+        os.makedirs(db_dir, exist_ok=True)
+        
+        # Xóa file nếu nó là 0-byte (do script trước đó tạo nhầm)
+        if os.path.exists(self.db_path) and os.path.getsize(self.db_path) == 0:
+            try:
+                os.remove(self.db_path)
+                logger.info(f"Removed invalid 0-byte file: {self.db_path}")
+            except Exception as e:
+                pass
+
+        last_exc = None
+        for attempt in range(1, retries + 1):
+            try:
+                return duckdb.connect(self.db_path, read_only=False)
+            except duckdb.IOException as e:
+                err_str = str(e)
+                last_exc = e
+
+                # Nếu DuckDB báo file không hợp lệ, xóa đi để nó tự tạo lại ở lượt sau
+                if "not a valid" in err_str.lower() or "no such file" in err_str.lower():
+                    if os.path.exists(self.db_path):
+                        try:
+                            os.remove(self.db_path)
+                        except:
+                            pass
+                    # Tiếp tục retry
+                elif "lock" not in err_str.lower() and "pid" not in err_str.lower():
+                    raise e
+
+                # Tự động xóa stale lock file nếu PID 0 (process đã chết)
+                if "PID 0" in err_str:
+                    lock_file = f"{self.db_path}.lock"
+                    if os.path.exists(lock_file):
+                        try:
+                            os.remove(lock_file)
+                            logger.info(f"Auto-removed stale lock file: {lock_file}")
+                        except Exception as rm_err:
+                            logger.warning(f"Could not remove {lock_file}: {rm_err}")
+
+                logger.warning(
+                    f"DuckDB lock conflict (attempt {attempt}/{retries}): {e}. "
+                    f"Retrying in {delay}s..."
+                )
+                time.sleep(delay)
+                delay = min(delay * 1.5, 10.0)
+        raise last_exc
+
+
     def init_schema(self):
+
         """Khởi tạo schema cho cacheable data"""
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS products (
@@ -229,14 +284,17 @@ class DuckDBStore:
         for _ in range(6):
             params.extend([query_text, pattern])
 
-        if query_text:
-            query += """
-                AND (
-                    name ILIKE ? OR id ILIKE ? OR category ILIKE ? OR
-                    description ILIKE ? OR material ILIKE ? OR print_techniques ILIKE ?
-                )
-            """
-            params.extend([pattern] * 6)
+        words = query_text.strip().split() if query_text else []
+        if words:
+            for word in words:
+                word_pattern = f"%{word}%"
+                query += """
+                    AND (
+                        name ILIKE ? OR id ILIKE ? OR category ILIKE ? OR
+                        description ILIKE ? OR material ILIKE ? OR print_techniques ILIKE ?
+                    )
+                """
+                params.extend([word_pattern] * 6)
 
         if category:
             query += " AND category ILIKE ?"
@@ -318,6 +376,11 @@ class DuckDBStore:
             "SELECT * FROM skus WHERE UPPER(sku_code) = UPPER(?) LIMIT 1",
             (sku_code,),
         ).fetchone()
+        if not row:
+            row = self.conn.execute(
+                "SELECT * FROM skus WHERE sku_code ILIKE ? LIMIT 1",
+                (f"%{sku_code}%",),
+            ).fetchone()
         if not row:
             return None
         columns = [column[0] for column in self.conn.description]

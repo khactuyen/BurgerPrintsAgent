@@ -10,6 +10,7 @@ services:
     volumes:
       - ./backend:/app
       - backend_cache:/app/.cache
+      - backend_data:/app/data
       - ./totemic-vim-467706-a3-2b41c9267c79.json:/app/vertex-service-account.json:ro
     environment:
       - PYTHONUNBUFFERED=1
@@ -36,3 +37,4 @@ services:
 
 volumes:
   backend_cache:
+  backend_data:
