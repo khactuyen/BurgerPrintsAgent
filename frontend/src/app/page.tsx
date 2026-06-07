@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Menu, Plus } from 'lucide-react';
+import { Send, Menu, Plus, Sun, Moon } from 'lucide-react';
 import MessageBubble from '@/components/MessageBubble';
 import StreamingIndicator from '@/components/StreamingIndicator';
 import { generateSessionId, getApiBaseUrl } from '@/lib/api';
@@ -18,7 +18,8 @@ export default function ChatPage() {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -42,6 +43,23 @@ export default function ChatPage() {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    // Khôi phục theme đã lưu (mặc định: light)
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
+    const initial = saved === 'dark' ? 'dark' : 'light';
+    setTheme(initial);
+    document.documentElement.setAttribute('data-theme', initial);
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme(prev => {
+      const next = prev === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('theme', next); } catch {}
+      return next;
+    });
+  };
 
   const handleSend = async (text: string = inputValue) => {
     if (!text.trim() || isLoading) return;
@@ -195,11 +213,7 @@ export default function ChatPage() {
           <img className="brand-logo" src="/burgerprint-logo.svg" alt="BurgerPrint" />
         </div>
         
-        <button className="glass-light" style={{
-          display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem',
-          borderRadius: '0.5rem', color: 'var(--text-primary)', border: '1px solid var(--border)',
-          cursor: 'pointer', background: 'transparent', transition: 'all 0.2s'
-        }} onClick={() => {
+        <button className="new-chat-btn" onClick={() => {
           setSessionId(generateSessionId());
           setMessages([{
             id: 'welcome',
@@ -211,13 +225,20 @@ export default function ChatPage() {
           <span>New Chat</span>
         </button>
 
+        <div className="sidebar-spacer" />
+
+        <button className="theme-toggle" onClick={toggleTheme}>
+          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+        </button>
+
       </div>
 
       {/* Main Chat Area */}
       <div className="main-content">
         {/* Mobile Header */}
-        <div style={{ display: 'flex', alignItems: 'center', padding: '1rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)' }} className="md:hidden">
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)' }}>
+        <div className="mobile-header">
+          <button className="icon-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
             <Menu size={24} />
           </button>
           <img className="mobile-brand-logo" src="/burgerprint-logo.svg" alt="BurgerPrint" />
@@ -242,15 +263,16 @@ export default function ChatPage() {
               onKeyDown={handleKeyDown}
               disabled={isLoading}
             />
-            <button 
+            <button
               className="send-button"
               onClick={() => handleSend()}
               disabled={!inputValue.trim() || isLoading}
             >
-              <Send size={18} />
+              <Send size={16} />
+              <span>Send</span>
             </button>
           </div>
-          <div style={{ textAlign: 'center', marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          <div className="input-hint">
             AI Agent có thể mắc lỗi. Vui lòng kiểm tra lại thông tin quan trọng.
           </div>
         </div>
